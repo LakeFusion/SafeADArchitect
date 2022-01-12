@@ -81,37 +81,37 @@ class NextLidar(object):
         ('x', np.float32), ('y', np.float32), ('z', np.float32),
         ('cosAngle', np.float32), ('idx', np.uint32), ('tag', np.uint32)])
 
-    _baseTs = int(time.time())
-
-    def __init__(self, topic, shortRange, sensorActor, rclpy, world, *_):
+    def __init__(self, topic, shortRange, sensorActor, rclpy, world, dataIndex, *_):
         if not SemanticPoint.getWorld():
             SemanticPoint.setWorld(world)
 
-        self.shortRange = shortRange
-        self.rosNode = rclpy.create_node('node' + topic)
-        self.topic = topic
+        self._dataIndex = dataIndex
+
+        self._shortRange = shortRange
+        self._rosNode = rclpy.create_node('node' + topic)
+        self._topic = topic
 
         # vertical angle of the top row
-        self.degTopRow = float(sensorActor.attributes['upper_fov'])
-        self.rows = int(sensorActor.attributes['channels'])
-        self.degPerRow = (self.degTopRow - float(sensorActor.attributes['lower_fov'])) / float(self.rows)
+        self._degTopRow = float(sensorActor.attributes['upper_fov'])
+        self._rows = int(sensorActor.attributes['channels'])
+        self._degPerRow = (self._degTopRow - float(sensorActor.attributes['lower_fov'])) / float(self._rows)
 
         # special handling of p0 for the road
         if shortRange:
             # d10: distance in meters which the sensor can detect a 10% target
-            self.d10 = 15
+            self._d10 = 15
             # custom p0 value for asphalt to mimic the characteristic of ibeoNext
             self._p0AsphaltDefault = 50 * NextLidar._lum2p0Factor
 
         else:
-            self.d10 = 71
+            self._d10 = 71
             # long range looks further than IbeoNext60 on asphalt
             self._p0AsphaltDefault = 30
 
         self.header = Header(frame_id='map')
 
         # create a publisher for this lidar
-        self.publisher = self.rosNode.create_publisher(PointCloud2, self.topic,
+        self._publisher = self._rosNode.create_publisher(PointCloud2, self._topic,
                                                        QoSProfile(depth=1))
 
     def __del__(self):
@@ -122,7 +122,7 @@ class NextLidar(object):
         elevation = math.degrees(math.atan2(point.z, math.sqrt(point.x * point.x + point.y * point.y)))
 
         # calculate row
-        row = (round(-(elevation - self.degTopRow) / self.degPerRow))
+        row = (round(-(elevation - self._degTopRow) / self._degPerRow))
 
         if ((row < 20) or (row > 80)) and ((row % 2) == 1):
             point.valid = False
@@ -134,12 +134,17 @@ class NextLidar(object):
             distWithNoise = distance - (NextLidar._noiseDistance * random())
             point.scaleDistance((distWithNoise / distance) * NextLidar._biasEpsilonFactor)
 
-    def processCloud(self, lidarMeasurement, ts):
+    def processCloud(self, data, ts):
+        measurement = data[self._dataIndex]
+
+        if measurement is None:
+            return
+
         tsSec = int(ts)
         self.header.stamp.sec = tsSec
         self.header.stamp.nanosec = int((ts - tsSec) * 1000000000.0)
 
-        pointList = np.frombuffer(lidarMeasurement.raw_data, dtype=NextLidar._dt)
+        pointList = np.frombuffer(measurement.raw_data, dtype=NextLidar._dt)
 
         cloudSize = pointList.shape[0]
 
@@ -177,7 +182,7 @@ class NextLidar(object):
                                data=memoryview(self._pcList))
 
     def publish(self):
-        self.publisher.publish(self._pc)
+        self._publisher.publish(self._pc)
 
     # filter out points depending on colour, distance, apply intensity effects
     def applyPostProcessing(self, pt):
@@ -208,9 +213,9 @@ class NextLidar(object):
 
         # if the theta is above 80°
         if thetaAbove80Deg:
-            dMax = math.sqrt(10.0 * p0 * (NextLidar._t0 / (tanTheta * rSinAlpha )) * NextLidar._c * pt.cosTheta) * self.d10
+            dMax = math.sqrt(10.0 * p0 * (NextLidar._t0 / (tanTheta * rSinAlpha )) * NextLidar._c * pt.cosTheta) * self._d10
         else:
-            dMax = math.sqrt(10.0 * p0 * pt.cosTheta) * self.d10
+            dMax = math.sqrt(10.0 * p0 * pt.cosTheta) * self._d10
 
         # invalidate point depending on its reflectivity
         currentEpsilon = r - dMax
@@ -234,7 +239,7 @@ class NextLidar(object):
                 pt.i = 0.04
 
             # if the instance is a short range, apply interlacing on upper and lower rows
-            if self.shortRange:
+            if self._shortRange:
                 self._applyInterlacing(pt)
 
             self._addDistanceNoiseAndBias(pt)
