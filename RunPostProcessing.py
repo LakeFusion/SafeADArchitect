@@ -115,7 +115,7 @@ def main():
         while True:
             data = [q.get(timeout=2.0) for q in gQueues]
 
-            ts = data[0].platform_timestamp
+            ts = data[0].elapsed_seconds
 
             for lidarIdx in range(len(lidarList)):
                 measurement = data[lidarIdx + 1]
