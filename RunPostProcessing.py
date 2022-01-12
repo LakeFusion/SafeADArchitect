@@ -11,6 +11,7 @@ import glob
 import sys
 import os.path
 import time
+from datetime import datetime as dt
 
 try:
     sys.path.append(glob.glob('./carla-0.9.11.egg')[0])
@@ -61,9 +62,16 @@ def main():
 
     args = argparser.parse_args()
 
+    baseTime = time.time()
+
     if os.path.exists(args.recPath):
+        recording = True
+        recPath = os.path.join(args.recPath, dt.fromtimestamp(baseTime).strftime("%Y%m%d_%H%M%S"))
         from NextRecordingLidar import NextRecordingLidar as SafeADLidar
+        from RecordingCamera import RecordingCamera as SafeADCamera
     else:
+        recording = False
+        recPath = ''
         from NextLidar import NextLidar as SafeADLidar
 
     client = carla.Client(args.host, args.port)
@@ -88,6 +96,7 @@ def main():
                          'lidar_front_long': ('center11', False),
                          'lidar_front_right': ('right', True)}
         lidarList = []
+        camList = []
 
         lidarCount = 0
         lidarCountMax = len(lidarInitList) - 1
@@ -95,36 +104,43 @@ def main():
         # make a queue for the timestamp data
         makeQueue(world.on_tick)
 
+        qIndex = 1
         for actor in actors:
             if (actor.type_id == "sensor.lidar.ray_cast_semantic"):
                 try:
                     if lidarCount > lidarCountMax:
                         break
 
-                    makeQueue(actor.listen)
-
                     initTuple = lidarInitList[actor.attributes['role_name']]
-                    lidarList.append(SafeADLidar(initTuple[0], initTuple[1], actor, rclpy, world, args.recPath))
+
+                    lidarList.append(SafeADLidar(initTuple[0], initTuple[1], actor, rclpy, world, qIndex, recPath))
+                    makeQueue(actor.listen)
+                    qIndex += 1
+
                     print("Connecting to " + actor.attributes['role_name'])
                     lidarCount += 1
                 except KeyError:
                     print("Lidar name " + actor.attributes['role_name'] + " is not in the list, ignoring...")
                 finally:
                     pass
+            else:
+                if recording and (actor.type_id == "sensor.camera.rgb"):
+                    camList.append(SafeADCamera(actor, recPath, len(camList), qIndex))
+                    makeQueue(actor.listen)
+                    qIndex += 1
 
         while True:
             data = [q.get(timeout=2.0) for q in gQueues]
+            ts = baseTime + data[0].elapsed_seconds
 
-            ts = data[0].elapsed_seconds
-
-            for lidarIdx in range(len(lidarList)):
-                measurement = data[lidarIdx + 1]
-
-                if measurement is not None:
-                    lidarList[lidarIdx].processCloud(measurement, ts)
+            for lidar in lidarList:
+                lidar.processCloud(data, ts)
 
             for lidar in lidarList:
                 lidar.publish()
+
+            for cam in camList:
+                cam.save(ts, data)
 
     except KeyboardInterrupt:
         gRun = False
