@@ -6,7 +6,6 @@
 # For a copy, see <https://opensource.org/licenses/MIT>.
 
 import os.path
-from datetime import datetime as dt
 from NextLidar import NextLidar
 
 try:
@@ -29,16 +28,16 @@ class NextRecordingLidar(NextLidar):
         ('x', np.float32), ('y', np.float32), ('z', np.float32),
         ('intensity', np.float32)])
 
-    def __init__(self, topic, shortRange, sensorActor, rclpy, world, recordingPath):
-        super().__init__(topic, shortRange, sensorActor, rclpy, world)
+    def __init__(self, topic, shortRange, sensorActor, rclpy, world, dataIndex, recordingPath):
+        super().__init__(topic, shortRange, sensorActor, rclpy, world, dataIndex)
 
         if len(recordingPath):
-            self._recordingDir = os.path.join(recordingPath, dt.now().strftime("%Y%m%d_%H%M%S"), "pcd_" + topic)
+            self._recordingDir = os.path.join(recordingPath, "pcd_" + topic)
             self._createRecordingDir()
             print("Recording into " + str(self._recordingDir))
 
     def genFilename(self, ts):
-        return self._filenamePrefix + str(float(super()._baseTs) + ts)[:19] + '.pcd'
+        return self._filenamePrefix + str('{:10.9f}').format(ts) + '.pcd'
 
     def writeHeader(self, fileObj):
         pointCount = str(len(self._pcList) // 4)
