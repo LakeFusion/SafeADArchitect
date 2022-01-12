@@ -23,6 +23,8 @@ class NextRecordingLidar(NextLidar):
     This class also records the processed frames as pcd files.
     """
 
+    _headerPrefix = '# .PCD v0.7 - Point Cloud Data file format\nVERSION 0.7\nFIELDS x y z intensity\nSIZE 4 4 4 4\nTYPE F F F F\nCOUNT 1 1 1 1\nWIDTH '
+
     _pcdDt = np.dtype([
         ('x', np.float32), ('y', np.float32), ('z', np.float32),
         ('intensity', np.float32)])
@@ -40,20 +42,10 @@ class NextRecordingLidar(NextLidar):
 
     def writeHeader(self, fileObj):
         pointCount = str(len(self._pcList) // 4)
-        header = ["# .PCD v0.7 - Point Cloud Data file format\n",
-                  "VERSION 0.7\n",
-                  "FIELDS x y z intensity\n",
-                  "SIZE 4 4 4 4\n",
-                  "TYPE F F F F\n",
-                  "COUNT 1 1 1 1\n",
-                  "WIDTH " + pointCount,
-                  "\nHEIGHT 1\n",
-                  "VIEWPOINT 0 0 0 1 0 0 0\n",
-                  "POINTS " + pointCount,
-                  "\nDATA ascii\n"]
 
-        for line in header:
-            fileObj.write(line)
+        header = self._headerPrefix + pointCount + '\nHEIGHT 1\nVIEWPOINT 0 0 0 1 0 0 0\nPOINTS ' + pointCount + '\nDATA ascii\n'
+
+        fileObj.write(header)
 
     def _createRecordingDir(self):
         try:
