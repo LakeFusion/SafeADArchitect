@@ -40,7 +40,7 @@ class NextRecordingLidar(NextLidar):
         return self._filenamePrefix + str('{:10.9f}').format(ts) + '.pcd'
 
     def writeHeader(self, fileObj):
-        pointCount = str(len(self._pcList) // 4)
+        pointCount = str(len(self._pcList) // 16)
 
         header = self._headerPrefix + pointCount + '\nHEIGHT 1\nVIEWPOINT 0 0 0 1 0 0 0\nPOINTS ' + pointCount + '\nDATA ascii\n'
 
